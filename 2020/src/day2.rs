@@ -1,5 +1,4 @@
-use std::fs::File;
-use std::io::prelude::*;
+use crate::inputs::read_input;
 
 #[derive(Clone, Debug, PartialEq)]
 struct PasswordPolicy {
@@ -53,12 +52,9 @@ impl Password {
         self.policy.is_valid(self.password)
     }
 }
-fn main() -> std::io::Result<()> {
-    println!("Hello, world!");
 
-    let mut file = File::open("input")?;
-    let mut contents = String::new();
-    file.read_to_string(&mut contents)?;
+pub fn main() -> std::io::Result<()> {
+    let contents = read_input(2)?;
 
     let lines : Vec<Password> = contents.split("\n")
         .filter(|x| !x.is_empty())

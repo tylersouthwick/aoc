@@ -1,6 +1,5 @@
 use std::ops::Add;
-use std::fs::File;
-use std::io::prelude::*;
+use crate::inputs::read_input;
 
 #[derive(Debug, PartialEq, Copy,Clone)]
 enum ForestItem {
@@ -107,10 +106,8 @@ impl Forest {
         trees
     }
 }
-fn main() -> std::io::Result<()> {
-    let mut file = File::open("input")?;
-    let mut contents = String::new();
-    file.read_to_string(&mut contents)?;
+pub fn main() -> std::io::Result<()> {
+    let contents = read_input(3)?;
 
     let forest = Forest::from_str(contents.as_str());
     //println!("{:?}", forest);

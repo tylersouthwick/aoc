@@ -1,5 +1,5 @@
 [package]
-name = "puzzle3"
+name = "aoc2020"
 version = "0.1.0"
 authors = ["Tyler Southwick <tyler@northfuse.io>"]
 edition = "2018"
