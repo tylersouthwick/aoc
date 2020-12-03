@@ -106,7 +106,7 @@ impl Forest {
         trees
     }
 }
-pub fn main() -> std::io::Result<()> {
+pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let contents = read_input(3)?;
 
     let forest = Forest::from_str(contents.as_str());

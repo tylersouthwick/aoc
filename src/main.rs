@@ -11,7 +11,7 @@ macro_rules! run_day {
         println!("{} end {} {}", "=".repeat(10), stringify!($input), "=".repeat(10));
     }
 }
-fn main() -> std::io::Result<()> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     run_day!(day1);
     run_day!(day2);
     run_day!(day3);

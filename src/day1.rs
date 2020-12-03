@@ -1,6 +1,6 @@
 use crate::inputs::read_input;
 
-pub fn main() -> std::io::Result<()> {
+pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let contents = read_input(1)?;
 
     let numbers : Vec<i32> = contents.split("\n")

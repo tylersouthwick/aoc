@@ -53,7 +53,7 @@ impl Password {
     }
 }
 
-pub fn main() -> std::io::Result<()> {
+pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let contents = read_input(2)?;
 
     let lines : Vec<Password> = contents.split("\n")
