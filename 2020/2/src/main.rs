@@ -3,33 +3,35 @@ use std::io::prelude::*;
 
 #[derive(Clone, Debug, PartialEq)]
 struct PasswordPolicy {
-    min : i32,
-    max : i32,
+    position1 : usize,
+    position2 : usize,
     character : char
 }
 
 impl PasswordPolicy {
     fn from_str(s : &str) -> PasswordPolicy {
         let tokens : Vec<&str> = s.split(" ").collect();
-        let range: Vec<i32> = tokens[0].split("-")
-            .map(|x| x.to_string().parse::<i32>().unwrap())
+        let range: Vec<usize> = tokens[0].split("-")
+            .map(|x| x.to_string().parse::<usize>().unwrap())
             .collect();
         PasswordPolicy {
-            min: range[0],
-            max: range[1],
+            position1: range[0],
+            position2: range[1],
             character: tokens[1].chars().next().unwrap(),
         }
     }
 
     fn is_valid(self, password : String) -> bool {
-        let mut count = 0;
-        for c in password.chars() {
-            if c == self.character {
-                count = count + 1;
-            }
+        let chars : Vec<char> = password.chars().collect();
+        let position1 = self.position1 - 1;
+        let position2 = self.position2 - 1;
+        if chars[position1] == self.character && chars[position2] == self.character {
+            return false;
+        } else if chars[position1] == self.character || chars[position2] == self.character {
+            return true;
+        } else {
+            return false;
         }
-        //println!("{} has {} {} times", password, self.character, count);
-        count <= self.max && count >= self.min
     }
 }
 
@@ -77,8 +79,8 @@ mod tests {
         assert_eq!(Password::from_str("1-3 a: abcde"), Password {
             password: "abcde".to_string(),
             policy: PasswordPolicy {
-                min: 1,
-                max: 3,
+                position1: 1,
+                position2: 3,
                 character: 'a'
             }
         })
@@ -89,8 +91,8 @@ mod tests {
         let password = Password {
             password: "abcde".to_string(),
             policy: PasswordPolicy {
-                min: 1,
-                max: 3,
+                position1: 1,
+                position2: 3,
                 character: 'a'
             }
         };
@@ -99,14 +101,24 @@ mod tests {
 
     #[test]
     fn validate_invalid_password_policy() {
-        let password = Password {
+        let password1 = Password {
             password: "cdefg".to_string(),
             policy: PasswordPolicy {
-                min: 1,
-                max: 3,
+                position1: 1,
+                position2: 3,
                 character: 'b'
             }
         };
-        assert_eq!(password.is_valid(), false)
+        assert_eq!(password1.is_valid(), false);
+
+        let password2 = Password {
+            password: "ccccccccc".to_string(),
+            policy: PasswordPolicy {
+                position1: 1,
+                position2: 3,
+                character: 'b'
+            }
+        };
+        assert_eq!(password2.is_valid(), false)
     }
 }
