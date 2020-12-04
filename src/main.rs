@@ -5,6 +5,8 @@ mod day2;
 mod day3;
 mod day4;
 
+extern crate paste;
+
 macro_rules! run_day {
     ($input:ident) => {
         println!("{} start {} {}", "=".repeat(10), stringify!($input), "=".repeat(10));

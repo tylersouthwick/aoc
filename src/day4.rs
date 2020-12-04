@@ -29,7 +29,66 @@ impl fmt::Display for PassportParseError {
 }
 
 impl Passport {
-    fn is_valid(&self) -> bool {
+    fn validate_byr(s : &str) -> bool {
+        match s.parse::<i32>() {
+            Ok(i) => i >= 1920 && i <= 2002,
+                _ => false,
+        }
+    }
+    fn validate_iyr(s : &str) -> bool {
+        match s.parse::<i32>() {
+            Ok(i) => i >= 2010 && i <= 2020,
+                _ => false,
+        }
+    }
+    fn validate_eyr(s : &str) -> bool {
+        match s.parse::<i32>() {
+            Ok(i) => i >= 2020 && i <= 2030,
+                _ => false,
+        }
+    }
+    fn validate_hgt(s : &str) -> bool {
+        if s.ends_with("cm") {
+            match s[0..(s.len() - 2)].parse::<i32>() {
+                Ok(cm) => cm >= 150 && cm <= 193,
+                _ => false,
+            }
+        } else if s.ends_with("in") {
+            match s[0..(s.len() - 2)].parse::<i32>() {
+                Ok(inches) => inches >= 59 && inches <= 76,
+                _ => false,
+            }
+        } else {
+            false
+        }
+    }
+    fn is_hex(c : char) -> bool {
+        match c {
+            '0'..='9' => true,
+            'A'..='F' => true,
+            'a'..='f' => true,
+            _ => false,
+        }
+    }
+
+    fn validate_hcl(s : &str) -> bool {
+        if s.len() != 7 || !s.starts_with("#") {
+            false
+        } else {
+            s[1..s.len()].chars().map(Passport::is_hex).fold(true, |a, b| a && b)
+        }
+    }
+    fn validate_ecl(s : &str) -> bool {
+        vec!["amb", "blu", "brn", "gry", "grn", "hzl", "oth"].contains(&s)
+    }
+    fn validate_pid(s : &str) -> bool {
+        if s.len() != 9 {
+            false
+        } else {
+            s.chars().map(char::is_numeric).fold(true, |a, b| a && b)
+        }
+    }
+    fn is_valid_part1(&self) -> bool {
         let fields = vec![
             self.birth_year.as_ref(),
             self.issue_year.as_ref(),
@@ -44,6 +103,28 @@ impl Passport {
         fields.iter()
             .map(|x| x.is_some())
             .fold(true, |a, b| a && b)
+    }
+
+    fn is_valid_part2(&self) -> bool {
+        if !self.is_valid_part1() {
+            false
+        } else {
+        let fields : Vec<(Option<&String>, fn(&str) -> bool)> = vec![
+            (self.birth_year.as_ref(), Passport::validate_byr),
+            (self.issue_year.as_ref(), Passport::validate_iyr),
+            (self.expiration_year.as_ref(), Passport::validate_eyr),
+            (self.height.as_ref(), Passport::validate_hgt),
+            (self.hair_color.as_ref(), Passport::validate_hcl),
+            (self.eye_color.as_ref(), Passport::validate_ecl),
+            (self.passport_id.as_ref(), Passport::validate_pid)
+        ];
+        fields.iter()
+            .map( |(field, validator)|  match field {
+                Some(s) => validator(s.as_str()),
+                None => false,
+            })
+        .fold(true, |a, b| a && b)
+        }
     }
 }
 impl FromStr for Passport {
@@ -73,11 +154,23 @@ struct Passports {
 }
 
 impl Passports {
-    fn valid_passports(&self) -> usize {
+    fn valid_passports_part1(&self) -> usize {
         self.passports.iter()
-            .filter(|passport| passport.is_valid())
+            .filter(|passport| passport.is_valid_part1())
             .collect::<Vec<&Passport>>()
             .len()
+    }
+
+    fn valid_passports_part2(&self) -> usize {
+        self.passports.iter()
+            .filter(|passport| passport.is_valid_part2())
+            .collect::<Vec<&Passport>>()
+            .len()
+    }
+
+    #[cfg(test)]
+    fn len(&self) -> usize {
+        self.passports.len()
     }
 
     #[cfg(test)]
@@ -126,7 +219,8 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let passports = Passports::from_str(contents.as_str())?;
 
-    println!("part1: found {} valid passports", passports.valid_passports());
+    println!("part1: found {} valid passports", passports.valid_passports_part1());
+    println!("part2: found {} valid passports", passports.valid_passports_part2());
 
     Ok(())
 }
@@ -209,28 +303,115 @@ byr:1937 iyr:2017 cid:147 hgt:183cm";
                     passport_id: Some("166559648".to_string()),
                     country_id: None,
                 },
-            ],
+                ],
         });
     }
 
-    #[rstest(passport_id, is_valid,
-        case("860033327", true),
-        case("028048884", false),
-        case("760753108", true),
-        case("166559648", false),
-        ::trace
-    )]
-    fn validate_passports(passport_id : &str, is_valid : bool) {
-        let passports = Passports::from_str(PASSPORTS_SAMPLE).unwrap();
+    mod part1 {
+        use super::*;
+        #[rstest(passport_id, is_valid,
+            case("860033327", true),
+            case("028048884", false),
+            case("760753108", true),
+            case("166559648", false),
+            ::trace
+        )]
+            fn validate_passports_part1(passport_id : &str, is_valid : bool) {
+                let passports = Passports::from_str(PASSPORTS_SAMPLE).unwrap();
 
-        assert_eq!(passports.find_by_id(passport_id).unwrap().is_valid(), is_valid);
+                assert_eq!(passports.find_by_id(passport_id).unwrap().is_valid_part1(), is_valid);
+            }
+
+        #[test]
+        fn valid_passport_count() {
+            let passports = Passports::from_str(PASSPORTS_SAMPLE).unwrap();
+
+            assert_eq!(passports.valid_passports_part1(), 2);
+        }
     }
 
-    #[test]
-    fn valid_passport_count() {
-        let passports = Passports::from_str(PASSPORTS_SAMPLE).unwrap();
+    mod part2 {
+        use super::*;
 
-        assert_eq!(passports.valid_passports(), 2);
+        mod field_validating {
+            use paste::paste;
+            use super::super::*;
+
+            macro_rules! field_tests {
+                ($($field:ident $valid:ident: $value:expr,)*) => {
+                    paste! {
+                        $(
+                            #[test]
+                            fn [<$field _ $valid>]() {
+                                let input = $value;
+                                let is_valid = stringify!($valid).starts_with("valid");
+
+                                assert_eq!(Passport::[<validate_ $field>](input), is_valid);
+                            }
+                        )*
+                    }
+                }
+            }
+
+            field_tests! {
+                byr valid:   "2002",
+                byr invalid: "2003",
+                byr invalid2: "a003",
+
+                hgt valid:   "60in",
+                hgt valid2:   "190cm",
+                hgt invalid: "190in",
+                hgt invalid2: "190",
+
+                hcl valid:   "#123abc",
+                hcl invalid: "#123abz",
+                hcl invalid2: "123abc",
+
+                ecl valid:   "brn",
+                ecl invalid: "wat",
+
+                pid valid:   "000000001",
+                pid invalid: "0123456789",
+            }
+        }
+        const INVALID_PART2_PASSPORTS : &str = "eyr:1972 cid:100
+hcl:#18171d ecl:amb hgt:170 pid:186cm iyr:2018 byr:1926
+
+iyr:2019
+hcl:#602927 eyr:1967 hgt:170cm
+ecl:grn pid:012533040 byr:1946
+
+hcl:dab227 iyr:2012
+ecl:brn hgt:182cm pid:021572410 eyr:2020 byr:1992 cid:277
+
+hgt:59cm ecl:zzz
+eyr:2038 hcl:74454a iyr:2023
+pid:3556412378 byr:2007";
+        #[test]
+        fn invalid_passports() {
+            let passports = Passports::from_str(INVALID_PART2_PASSPORTS).unwrap();
+            assert_eq!(passports.len(), 4);
+            assert_eq!(passports.valid_passports_part2(), 0);
+        }
+
+        const VALID_PART2_PASSPORTS : &str = "pid:087499704 hgt:74in ecl:grn iyr:2012 eyr:2030 byr:1980
+hcl:#623a2f
+
+eyr:2029 ecl:blu cid:129 byr:1989
+iyr:2014 pid:896056539 hcl:#a97842 hgt:165cm
+
+hcl:#888785
+hgt:164cm byr:2001 iyr:2015 cid:88
+pid:545766238 ecl:hzl
+eyr:2022
+
+iyr:2010 hgt:158cm hcl:#b6652a ecl:blu byr:1944 eyr:2021 pid:093154719";
+
+        #[test]
+        fn valid_passports() {
+            let passports = Passports::from_str(VALID_PART2_PASSPORTS).unwrap();
+            assert_eq!(passports.len(), 4);
+            assert_eq!(passports.valid_passports_part2(), 4);
+        }
     }
-
 }
