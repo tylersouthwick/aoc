@@ -3,6 +3,8 @@ use std::str::FromStr;
 use std::{error::Error, fmt};
 use std::collections::HashMap;
 
+use rstest::rstest;
+
 #[derive(Debug, PartialEq, Clone)]
 struct Passport {
     birth_year: Option<String>,
@@ -25,6 +27,24 @@ impl fmt::Display for PassportParseError {
     }
 }
 
+impl Passport {
+    fn is_valid(&self) -> bool {
+        let fields = vec![
+            self.birth_year.as_ref(),
+            self.issue_year.as_ref(),
+            self.expiration_year.as_ref(),
+            self.height.as_ref(),
+            self.hair_color.as_ref(),
+            self.eye_color.as_ref(),
+            self.passport_id.as_ref(),
+            //no cid is ok as that means its from the north pole
+            //self.cid.as_ref(),
+        ];
+        fields.iter()
+            .map(|x| x.is_some())
+            .fold(true, |a, b| a && b)
+    }
+}
 impl FromStr for Passport {
     type Err = PassportParseError;
 
@@ -51,6 +71,28 @@ struct Passports {
     passports : Vec<Passport>
 }
 
+impl Passports {
+    fn valid_passports(&self) -> usize {
+        self.passports.iter()
+            .filter(|passport| passport.is_valid())
+            .collect::<Vec<&Passport>>()
+            .len()
+    }
+
+    fn find_by_id(&self, id : &str) -> Option<&Passport> {
+        let matches : Vec<&Passport> = self.passports.iter()
+            .filter(|passport| match &passport.passport_id {
+                None => false,
+                Some(passport_id) => *passport_id == id.to_string(),
+            })
+            .collect();
+        if matches.len() == 0 {
+            None
+        } else {
+            Some(matches[0])
+        }
+    }
+}
 impl FromStr for Passports {
     type Err = PassportParseError;
 
@@ -123,8 +165,7 @@ byr:1937 iyr:2017 cid:147 hgt:183cm";
 
     #[test]
     fn parse_passports() {
-        let passports1 = Passports::from_str(PASSPORTS_SAMPLE).unwrap();
-        let passports2 = Passports {
+        assert_eq!(Passports::from_str(PASSPORTS_SAMPLE).unwrap(), Passports {
             passports: vec![
                 Passport {
                     birth_year: Some("1937".to_string()),
@@ -167,10 +208,27 @@ byr:1937 iyr:2017 cid:147 hgt:183cm";
                     country_id: None,
                 },
             ],
-        };
-        println!("passports1: {:?}", passports1);
-        println!("passports2: {:?}", passports2);
-        assert_eq!(passports1, passports2);
+        });
+    }
+
+    #[rstest(passport_id, is_valid,
+        case("860033327", true),
+        case("028048884", false),
+        case("760753108", true),
+        case("166559648", false),
+        ::trace
+    )]
+    fn validate_passports(passport_id : &str, is_valid : bool) {
+        let passports = Passports::from_str(PASSPORTS_SAMPLE).unwrap();
+
+        assert_eq!(passports.find_by_id(passport_id).unwrap().is_valid(), is_valid);
+    }
+
+    #[test]
+    fn valid_passport_count() {
+        let passports = Passports::from_str(PASSPORTS_SAMPLE).unwrap();
+
+        assert_eq!(passports.valid_passports(), 2);
     }
 
 }
