@@ -3,6 +3,9 @@ mod inputs;
 mod day1;
 mod day2;
 mod day3;
+mod day4;
+
+extern crate paste;
 
 macro_rules! run_day {
     ($input:ident) => {
@@ -15,6 +18,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     run_day!(day1);
     run_day!(day2);
     run_day!(day3);
+    run_day!(day4);
 
     Ok(())
 }
