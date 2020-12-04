@@ -3,6 +3,7 @@ use std::str::FromStr;
 use std::{error::Error, fmt};
 use std::collections::HashMap;
 
+#[cfg(test)]
 use rstest::rstest;
 
 #[derive(Debug, PartialEq, Clone)]
@@ -79,6 +80,7 @@ impl Passports {
             .len()
     }
 
+    #[cfg(test)]
     fn find_by_id(&self, id : &str) -> Option<&Passport> {
         let matches : Vec<&Passport> = self.passports.iter()
             .filter(|passport| match &passport.passport_id {
@@ -124,7 +126,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let passports = Passports::from_str(contents.as_str())?;
 
-    println!("found {} passports", passports.passports.len());
+    println!("part1: found {} valid passports", passports.valid_passports());
 
     Ok(())
 }
