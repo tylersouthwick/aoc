@@ -7,35 +7,62 @@ use std::collections::HashSet;
 use rstest::rstest;
 
 #[derive(Debug, PartialEq, Clone)]
+struct IndividualResult {
+    answers : Vec<char>,
+}
+
+impl FromStr for IndividualResult {
+    type Err = CustomsParseError;
+
+    fn from_str(s : &str) -> Result<Self, Self::Err> {
+        Ok(IndividualResult {
+            answers: s.chars().collect(),
+        })
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
 struct GroupResult {
-    results : HashSet<char>,
+    results : Vec<IndividualResult>,
 }
 
 impl GroupResult {
-    fn count(&self) -> usize {
-        self.results.len()
+    fn from_vec(results : Vec<Vec<char>>) -> Self {
+        GroupResult {
+            results: results.iter().map(|answers| IndividualResult {
+                answers: answers.iter().map(|x| *x).collect(),
+            }).collect(),
+        }
+    }
+
+    fn part1_count(&self) -> usize {
+        let set : HashSet<char> = self.results.iter()
+            .flat_map(|x| x.answers.iter())
+            .map(|x| *x)
+            .collect();
+        set.len()
     }
 }
 
 #[derive(Debug)]
-struct GroupResultParseError;
+struct CustomsParseError;
 
-impl Error for GroupResultParseError {}
-impl fmt::Display for GroupResultParseError {
+impl Error for CustomsParseError {}
+impl fmt::Display for CustomsParseError {
     fn fmt(&self, f:&mut fmt::Formatter) -> fmt::Result {
         write!(f, "Unable to parse group results")
     }
 }
 
 impl FromStr for GroupResult {
-    type Err = GroupResultParseError;
+    type Err = CustomsParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let members : HashSet<char> = s.split("\n")
-            .flat_map(|x| x.chars())
+        let members : Result<Vec<IndividualResult>, Self::Err> = s.split("\n")
+            .map(IndividualResult::from_str)
             .collect();
         Ok(GroupResult {
-            results: members,
+            results: members?,
         })
     }
 }
@@ -46,7 +73,7 @@ struct Groups {
 }
 
 impl FromStr for Groups {
-    type Err = GroupResultParseError;
+    type Err = CustomsParseError;
 
     fn from_str(s : &str) -> Result<Self, Self::Err> {
         let results : Result<Vec<GroupResult>, Self::Err> = s.split("\n\n")
@@ -62,8 +89,8 @@ impl Groups {
     fn len(&self) -> usize {
         self.results.len()
     }
-    fn count(&self) -> usize {
-        self.results.iter().map(GroupResult::count).sum()
+    fn part1_count(&self) -> usize {
+        self.results.iter().map(GroupResult::part1_count).sum()
     }
 
     fn from_input() -> Result<Groups, Box<dyn std::error::Error>> {
@@ -77,7 +104,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let groups = Groups::from_input()?;
     println!("loaded {} groups", groups.len());
-    println!("group sum of counts = {}", groups.count());
+    println!("group sum of part1 counts = {}", groups.part1_count());
 
     Ok(())
 }
@@ -86,25 +113,16 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 mod tests {
     use super::*;
 
-    macro_rules! set {
-        ( $( $x:expr ),* ) => {  // Match zero or more comma delimited items
-            {
-                let mut temp_set = HashSet::new();  // Create a mutable HashSet
-                $(
-                    temp_set.insert($x); // Insert each item matched into the HashSet
-                )*
-                    temp_set // Return the populated HashSet
-            }
-        };
-    }
-
-    #[rstest(group, result, count,
-        case("abcx\nabcy\nabcz", set!['a', 'b', 'c', 'x', 'y', 'z'], 6),
+    #[rstest(group, part1_count, result,
+        case("abcx\nabcy\nabcz", 6, vec![
+            vec!['a', 'b', 'c', 'x'],
+            vec!['a', 'b', 'c', 'y'],
+            vec!['a', 'b', 'c', 'z']]),
     )]
-    fn parse_group_result(group : &str, result : HashSet<char>, count : usize) {
+    fn parse_group_result(group : &str, result : Vec<Vec<char>>, part1_count : usize) {
         let group = GroupResult::from_str(group).unwrap();
-        assert_eq!(group.results, result);
-        assert_eq!(group.count(), count);
+        assert_eq!(group, GroupResult::from_vec(result));
+        assert_eq!(group.part1_count(), part1_count);
     }
 
     const TEST_INPUT : &str = "abc
@@ -128,30 +146,34 @@ b";
         let groups = Groups::from_str(TEST_INPUT).unwrap();
         assert_eq!(groups, Groups {
             results: vec![
-                GroupResult{
-                    results: set!['a', 'b', 'c'],
-                },
-                GroupResult{
-                    results: set!['a', 'b', 'c'],
-                },
-                GroupResult{
-                    results: set!['a', 'b', 'c'],
-                },
-                GroupResult{
-                    results: set!['a'],
-                },
-                GroupResult{
-                    results: set!['b'],
-                },
+                GroupResult::from_vec(vec![vec!['a', 'b', 'c']]),
+                GroupResult::from_vec(vec![
+                    vec!['a'],
+                    vec!['b'],
+                    vec!['c'],
+                ]),
+                GroupResult::from_vec(vec![
+                    vec!['a', 'b'],
+                    vec!['a', 'c'],
+                ]),
+                GroupResult::from_vec(vec![
+                    vec!['a'],
+                    vec!['a'],
+                    vec!['a'],
+                    vec!['a'],
+                ]),
+                GroupResult::from_vec(vec![
+                    vec!['b']
+                ]),
             ]
         });
-        assert_eq!(groups.count(), 11);
+        assert_eq!(groups.part1_count(), 11);
     }
 
     #[test]
     fn from_input() {
         let groups = Groups::from_input().unwrap();
-        assert_eq!(groups.count(), 6947);
+        assert_eq!(groups.part1_count(), 6947);
     }
 
 }
