@@ -5,6 +5,7 @@ mod day2;
 mod day3;
 mod day4;
 mod day5;
+mod day6;
 
 extern crate paste;
 
@@ -21,6 +22,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     run_day!(day3);
     run_day!(day4);
     run_day!(day5);
+    run_day!(day6);
 
     Ok(())
 }
