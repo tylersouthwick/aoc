@@ -160,12 +160,26 @@ impl Seats {
             None => 0,
         }
     }
+
+    fn my_seat(&self) -> Vec<usize> {
+        let all_seat_ids : Vec<usize> = self.seats.iter()
+            .map(Seat::seat_id)
+            .collect();
+        let highest_seat_id = self.highest_seat_id();
+        (0..=highest_seat_id)
+            .filter(|seat_id| !all_seat_ids.contains(seat_id))
+            .filter(|seat_id| all_seat_ids.contains(&(*seat_id + 1)) && all_seat_ids.contains(&(*seat_id - 1)))
+            .collect()
+    }
 }
 
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let seats = Seats::from_input()?;
     println!("highest seat_id: {}", seats.highest_seat_id());
+
+    let my_seat = seats.my_seat();
+    println!("my seat: {:?}", my_seat);
     Ok(())
 }
 
@@ -206,5 +220,13 @@ FFFBBBFRRR
 BBFFBBFRLL").unwrap();
 
         assert_eq!(seats.highest_seat_id(), 820);
+    }
+
+    #[test]
+    fn my_seat() {
+        let seats = Seats::from_input().unwrap();
+        let my_seat = seats.my_seat();
+
+        assert_eq!(my_seat, vec![617]);
     }
 }
