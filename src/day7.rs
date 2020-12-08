@@ -7,8 +7,9 @@ use std::collections::HashMap;
 #[cfg(test)]
 use rstest::rstest;
 
-trait CanContain {
+trait BagContents {
     fn can_contain(&self, s : &str) -> bool;
+    fn number_of_bags(&self) -> usize;
 }
 
 #[derive(Debug)]
@@ -72,10 +73,18 @@ impl FromStr for BagCount<String> {
         })
     }
 }
-impl CanContain for BagCount<BagNode> {
+impl <A> BagContents for BagCount<A> where A : BagContents + Clone + std::fmt::Debug {
     fn can_contain(&self, s : &str) -> bool {
         self.color.can_contain(s)
     }
+
+    fn number_of_bags(&self) -> usize {
+        let number_of_bags = self.color.number_of_bags();
+        let result = self.count * number_of_bags;
+        //println!("BagCount count={} color={:?} number_of_bags={} result={}", self.count, self.color, number_of_bags, result);
+        result
+    }
+
 }
 impl FromStr for BagRule<String> {
     type Err = BaggageRuleParseError;
@@ -97,14 +106,24 @@ impl FromStr for BagRule<String> {
         })
     }
 }
-impl CanContain for BagRule<BagNode> {
+impl <A> BagContents for BagRule<A> where A: BagContents + Clone + std::fmt::Debug  {
     fn can_contain(&self, s : &str) -> bool {
         let can_contain = self.contains.iter()
             .map(|bag_count| bag_count.can_contain(s))
             .fold(false, |a, b| a || b);
         //println!("BagRule checking if {} can contain {}: {}", self.color, s, can_contain);
-        can_contain
+        can_contain || self.color == s.to_string()
     }
+
+    fn number_of_bags(&self) -> usize {
+        //println!("BagRule:: looking for bags in bag rule: {}", self.color);
+        let num : usize = self.contains.iter()
+            .map(BagContents::number_of_bags)
+            .sum();
+        //println!("BagRule:: found {} bags in bag rule: {}", num, self.color);
+        num + 1
+    }
+
 }
 
 #[derive(Debug, PartialEq)]
@@ -135,29 +154,33 @@ impl BagRules<String> {
     }
 
     fn as_nodes(&self) -> BagRules<BagNode> {
-        let mut cached_map : HashMap<String, Option<BagNode>> = HashMap::new();
-        self.map(&mut |color : String| self.node_for_color(&mut cached_map, color.as_str()).unwrap())
+        let mut cached_map : HashMap<String, BagNode> = HashMap::new();
+        self.map(&mut |color : String| self.node_for_color(&mut cached_map, color.as_str()))
     }
 
-    fn node_for_color(&self, cached_nodes : &mut HashMap<String, Option<BagNode>>, color : &str) -> Option<BagNode> {
-        //println!("creating node for color={}", color);
-        match cached_nodes.get(&color.to_string()) {
-            Some(cached_value) => cached_value.as_ref().map(|x| x.clone()),
+    fn node_for_color(&self, cached_map : &mut HashMap<String, BagNode>, color : &str) -> BagNode {
+        match cached_map.get(&color.to_string()) {
+            Some(node) => node.clone(),
             None => {
+                //println!("creating node for color=[{}]", color);
                 for bag_rule in &self.bag_rules {
+                    //println!("checking bag_rule.color=[{}] color=[{}]", bag_rule.color, color.to_string());
                     if bag_rule.color == color.to_string() {
-                        let contains : Vec<BagNode> = bag_rule.contains.iter()
-                            .map(|bag_rule| self.node_for_color(cached_nodes, bag_rule.color.as_str()).unwrap())
+                        //println!("found {}", color.to_string());
+                        let contains : Vec<BagCount<BagNode>> = bag_rule.contains.iter()
+                            .map(|bag_count| bag_count.map(&mut |bag_color : String| self.node_for_color(cached_map, bag_color.as_str())))
                             .collect();
-                        let result = Some(BagNode {
-                            color: color.to_string(),
-                            contains: contains,
-                        });
-                        cached_nodes.insert(color.to_string(), result.clone());
-                        return result;
+                        let node = BagNode {
+                            bag_rule: BagRule {
+                                color: bag_rule.color.clone(),
+                                contains: contains,
+                            }
+                        };
+                        cached_map.insert(color.to_string(), node.clone());
+                        return node;
                     }
                 }
-                None
+                panic!("could not find node for color=[{}]", color);
             }
         }
     }
@@ -189,26 +212,29 @@ impl BagRules<BagNode> {
             .collect();
         can_contain
     }
+
+    fn count_number_of_bags_contained_within(&self, color : &str) -> usize {
+        let total : usize = self.bag_rules.iter()
+            .filter(|bag_rule| bag_rule.color == color.to_string())
+            .map(BagContents::number_of_bags)
+            .sum();
+        total - 1 //this includes the one at the top
+    }
+
 }
 
 #[derive(Debug, PartialEq, Clone)]
 struct BagNode {
-    color : String,
-    contains : Vec<BagNode>,
+    bag_rule: BagRule<BagNode>,
 }
 
-impl CanContain for BagNode {
+impl BagContents for BagNode {
     fn can_contain(&self, color : &str) -> bool {
-        let can_contain = if self.color == color.to_string() {
-            true
-        } else {
-            let can_contain : Vec<&BagNode> = self.contains.iter()
-                .filter(|node| node.can_contain(color))
-                .collect();
-            can_contain.len() > 0
-        };
-        //println!("BagNode checking if {} can_contain: {}: {}", self.color, color, can_contain);
-        can_contain
+        self.bag_rule.can_contain(color)
+    }
+
+    fn number_of_bags(&self) -> usize {
+        self.bag_rule.number_of_bags()
     }
 }
 
@@ -217,6 +243,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let rules = BagRules::from_input()?.as_nodes();
     println!("loaded {} rules", rules.len());
     println!("part1: {} bags can contain at least 1 shiny gold", rules.bags_that_can_contain("shiny gold").len());
+    println!("part2: {} individual bags are required in a shiny gold bag", rules.count_number_of_bags_contained_within("shiny gold"));
 
     Ok(())
 }
@@ -333,7 +360,6 @@ dotted black bags contain no other bags.";
     #[test]
     fn find_bag_colors_that_can_contain() {
         let rules = BagRules::from_str(TEST_DATA).unwrap().as_nodes();
-        println!("{:?}", rules);
         let bags_that_can_contain_shiny_gold = rules.bags_that_can_contain("shiny gold");
         assert_eq!(set![
             "bright white".to_string(),
@@ -348,4 +374,25 @@ dotted black bags contain no other bags.";
         let rules = BagRules::from_input().unwrap().as_nodes();
         assert_eq!(126, rules.bags_that_can_contain("shiny gold").len());
     }
+
+    const PART2_TEST_DATA : &str = "shiny gold bags contain 2 dark red bags.
+dark red bags contain 2 dark orange bags.
+dark orange bags contain 2 dark yellow bags.
+dark yellow bags contain 2 dark green bags.
+dark green bags contain 2 dark blue bags.
+dark blue bags contain 2 dark violet bags.
+dark violet bags contain no other bags.";
+
+    #[rstest(data, expected_count,
+        case(TEST_DATA, 32),
+        case(PART2_TEST_DATA, 126),
+        ::trace
+    )]
+    fn count_number_of_bags_contained_within(data : &str, expected_count : usize) {
+        let rules = BagRules::from_str(data).unwrap().as_nodes();
+        //println!("{:?}", rules);
+        let count = rules.count_number_of_bags_contained_within("shiny gold");
+        assert_eq!(expected_count, count);
+    }
+
 }
