@@ -7,6 +7,10 @@ use std::collections::HashMap;
 #[cfg(test)]
 use rstest::rstest;
 
+trait CanContain {
+    fn can_contain(&self, s : &str) -> bool;
+}
+
 #[derive(Debug)]
 struct BaggageRuleParseError;
 
@@ -25,17 +29,38 @@ impl std::convert::From<std::num::ParseIntError> for BaggageRuleParseError {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-struct BagRule {
+struct BagRule<A : Clone> {
     color : String,
-    contains : HashMap<String, usize>,
+    contains : Vec<BagCount<A>>,
+}
+
+impl <A : Clone> BagRule<A> {
+
+    fn map<B : Clone, F>(&self, f: &mut F) -> BagRule<B> where F: FnMut(A) -> B {
+        BagRule {
+            color: self.color.clone(),
+            contains: self.contains.iter()
+                .map(|bag_count| bag_count.map(f))
+                .collect(),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
-struct BagCount {
-    color : String,
+struct BagCount<A : Clone> {
+    color : A,
     count : usize,
 }
-impl FromStr for BagCount {
+
+impl <A : Clone> BagCount<A> {
+    fn map<B : Clone, F>(&self, f: &mut F) -> BagCount<B> where F: FnMut(A) -> B {
+        BagCount {
+            color: f(self.color.clone()),
+            count: self.count,
+        }
+    }
+}
+impl FromStr for BagCount<String> {
     type Err = BaggageRuleParseError;
 
     fn from_str(s : &str) -> Result<Self, Self::Err> {
@@ -47,23 +72,24 @@ impl FromStr for BagCount {
         })
     }
 }
-impl FromStr for BagRule {
+impl CanContain for BagCount<BagNode> {
+    fn can_contain(&self, s : &str) -> bool {
+        self.color.can_contain(s)
+    }
+}
+impl FromStr for BagRule<String> {
     type Err = BaggageRuleParseError;
 
     fn from_str(s : &str) -> Result<Self, Self::Err> {
         let tokens : Vec<&str> = s.split(" bags contain ").collect();
         //println!("tokens: {:?}", tokens);
         let contains = if tokens[1].contains("no other bags.") {
-            HashMap::new()
+            vec![]
         } else {
-            let rhs : Result<Vec<BagCount>, Self::Err> = tokens[1].split(",")
+            let rhs : Result<Vec<BagCount<String>>, Self::Err> = tokens[1].split(",")
                 .map(BagCount::from_str)
                 .collect();
-            let mut map = ::std::collections::HashMap::new();
-            for bag_count in rhs? {
-                map.insert(bag_count.color, bag_count.count);
-            }
-            map
+            rhs?
         };
         Ok(BagRule {
             color: tokens[0].to_string(),
@@ -71,17 +97,26 @@ impl FromStr for BagRule {
         })
     }
 }
-
-#[derive(Debug, PartialEq, Clone)]
-struct BagRules {
-    bag_rules : Vec<BagRule>
+impl CanContain for BagRule<BagNode> {
+    fn can_contain(&self, s : &str) -> bool {
+        let can_contain = self.contains.iter()
+            .map(|bag_count| bag_count.can_contain(s))
+            .fold(false, |a, b| a || b);
+        //println!("BagRule checking if {} can contain {}: {}", self.color, s, can_contain);
+        can_contain
+    }
 }
 
-impl FromStr for BagRules {
+#[derive(Debug, PartialEq)]
+struct BagRules<A : Clone> {
+    bag_rules : Vec<BagRule<A>>
+}
+
+impl FromStr for BagRules<String> {
     type Err = BaggageRuleParseError;
 
     fn from_str(s : &str) -> Result<Self, Self::Err> {
-        let results : Result<Vec<BagRule>, Self::Err> = s.split("\n")
+        let results : Result<Vec<BagRule<String>>, Self::Err> = s.split("\n")
                 .filter(|x| !x.is_empty())
                 .map(BagRule::from_str)
                 .collect();
@@ -91,16 +126,17 @@ impl FromStr for BagRules {
     }
 }
 
-impl BagRules{
+impl BagRules<String> {
 
-    fn from_input() -> Result<BagRules, Box<dyn std::error::Error>> {
+    fn from_input() -> Result<BagRules<String>, Box<dyn std::error::Error>> {
         let contents = read_input(7)?;
         let groups = BagRules::from_str(contents.as_str())?;
         Ok(groups)
     }
 
-    fn len(&self) -> usize {
-        self.bag_rules.len()
+    fn as_nodes(&self) -> BagRules<BagNode> {
+        let mut cached_map : HashMap<String, Option<BagNode>> = HashMap::new();
+        self.map(&mut |color : String| self.node_for_color(&mut cached_map, color.as_str()).unwrap())
     }
 
     fn node_for_color(&self, cached_nodes : &mut HashMap<String, Option<BagNode>>, color : &str) -> Option<BagNode> {
@@ -111,7 +147,7 @@ impl BagRules{
                 for bag_rule in &self.bag_rules {
                     if bag_rule.color == color.to_string() {
                         let contains : Vec<BagNode> = bag_rule.contains.iter()
-                            .map(|bag_rule| self.node_for_color(cached_nodes, bag_rule.0).unwrap())
+                            .map(|bag_rule| self.node_for_color(cached_nodes, bag_rule.color.as_str()).unwrap())
                             .collect();
                         let result = Some(BagNode {
                             color: color.to_string(),
@@ -126,20 +162,33 @@ impl BagRules{
         }
     }
 
+}
+
+impl <A : Clone> BagRules<A> {
+    fn map<B : Clone, F>(&self, f: &mut F) -> BagRules<B> where F: FnMut(A) -> B {
+        BagRules {
+            bag_rules: self.bag_rules.iter()
+                .map(|bag_rule| bag_rule.map(f))
+                .collect(),
+        }
+    }
+
+    fn len(&self) -> usize {
+        self.bag_rules.len()
+    }
+
+}
+
+impl BagRules<BagNode> {
     fn bags_that_can_contain(&self, color : &str) -> HashSet<String> {
-        let mut cached_map : HashMap<String, Option<BagNode>> = HashMap::new();
-        let bag_nodes : Vec<BagNode> = self.bag_rules.iter()
-            .map(|bag_rule| self.node_for_color(&mut cached_map, bag_rule.color.as_str()).unwrap())
-            .collect();
-        //println!("created tree. count={}", bag_nodes.len());
-        let can_contain : HashSet<String> = bag_nodes.iter()
-            .filter(|node| node.can_contain(color))
-            .map(|node| node.color.clone())
+        let can_contain : HashSet<String> = self.bag_rules
+            .iter()
+            .filter(|bag_rule| bag_rule.can_contain(color))
+            .map(|bag_rule| bag_rule.color.clone())
             .filter(|node_color| *node_color != color.to_string())
             .collect();
         can_contain
     }
-
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -148,23 +197,24 @@ struct BagNode {
     contains : Vec<BagNode>,
 }
 
-impl BagNode {
+impl CanContain for BagNode {
     fn can_contain(&self, color : &str) -> bool {
-        //println!("checking can_contain: {}", color);
-        if self.color == color.to_string() {
+        let can_contain = if self.color == color.to_string() {
             true
         } else {
             let can_contain : Vec<&BagNode> = self.contains.iter()
                 .filter(|node| node.can_contain(color))
                 .collect();
             can_contain.len() > 0
-        }
+        };
+        //println!("BagNode checking if {} can_contain: {}: {}", self.color, color, can_contain);
+        can_contain
     }
 }
 
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
-    let rules = BagRules::from_input()?;
+    let rules = BagRules::from_input()?.as_nodes();
     println!("loaded {} rules", rules.len());
     println!("part1: {} bags can contain at least 1 shiny gold", rules.bags_that_can_contain("shiny gold").len());
 
@@ -175,39 +225,43 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 mod tests {
     use super::*;
 
-    macro_rules! map(
-        { $($key:expr => $value:expr),+ } => {
-                                                 {
-                                                     let mut m = ::std::collections::HashMap::new();
-                                                     $(
-                                                         m.insert($key, $value);
-                                                     )+
-                                                         m
-                                                 }
-                                             };
-    );
     #[rstest(rule, result,
         case("light red bags contain 1 bright white bag, 2 muted yellow bags.", BagRule {
             color: "light red".to_string(),
-            contains: map!{
-                "bright white".to_string() => 1,
-                "muted yellow".to_string() => 2
-            }
+            contains: vec![
+                BagCount {
+                    color: "bright white".to_string(),
+                    count: 1,
+                },
+                BagCount {
+                    color: "muted yellow".to_string(),
+                    count: 2,
+                },
+            ]
         }),
         case("dark silver bags contain 1 dotted orange bag, 3 plaid beige bags, 5 faded white bags.", BagRule {
             color: "dark silver".to_string(),
-            contains: map!{
-                "dotted orange".to_string() => 1,
-                "plaid beige".to_string() => 3,
-                "faded white".to_string() => 5
-            },
+            contains: vec![
+                BagCount {
+                    color: "dotted orange".to_string(),
+                    count: 1,
+                },
+                BagCount {
+                    color: "plaid beige".to_string(),
+                    count: 3,
+                },
+                BagCount {
+                    color: "faded white".to_string(),
+                    count: 5
+                },
+            ],
         }),
         case("dark silver bags contain no other bags.", BagRule {
             color: "dark silver".to_string(),
-            contains: HashMap::new(),
+            contains: vec![],
         }),
     )]
-    fn parse_bag_rule(rule: &str, result : BagRule) {
+    fn parse_bag_rule(rule: &str, result : BagRule<String>) {
         let parsed = BagRule::from_str(rule).unwrap();
         assert_eq!(parsed, result);
     }
@@ -220,18 +274,33 @@ dark silver bags contain 1 dotted orange bag, 3 plaid beige bags, 5 faded white 
             bag_rules: vec![
                 BagRule {
                     color: "light red".to_string(),
-                    contains: map!{
-                        "bright white".to_string() => 1,
-                        "muted yellow".to_string() => 2
-                    }
+                    contains: vec![
+                        BagCount {
+                            color: "bright white".to_string(),
+                            count: 1,
+                        },
+                        BagCount {
+                            color: "muted yellow".to_string(),
+                            count: 2,
+                        },
+                    ],
                 },
                 BagRule {
                     color: "dark silver".to_string(),
-                    contains: map!{
-                        "dotted orange".to_string() => 1,
-                        "plaid beige".to_string() => 3,
-                        "faded white".to_string() => 5
-                    },
+                    contains: vec![
+                        BagCount {
+                            color: "dotted orange".to_string(),
+                            count: 1,
+                        },
+                        BagCount {
+                            color: "plaid beige".to_string(),
+                            count: 3,
+                        },
+                        BagCount {
+                            color: "faded white".to_string(),
+                            count: 5,
+                        },
+                    ],
                 },
             ],
         };
@@ -263,7 +332,8 @@ dotted black bags contain no other bags.";
 
     #[test]
     fn find_bag_colors_that_can_contain() {
-        let rules = BagRules::from_str(TEST_DATA).unwrap();
+        let rules = BagRules::from_str(TEST_DATA).unwrap().as_nodes();
+        println!("{:?}", rules);
         let bags_that_can_contain_shiny_gold = rules.bags_that_can_contain("shiny gold");
         assert_eq!(set![
             "bright white".to_string(),
@@ -275,7 +345,7 @@ dotted black bags contain no other bags.";
 
     #[test]
     fn part1() {
-        let rules = BagRules::from_input().unwrap();
+        let rules = BagRules::from_input().unwrap().as_nodes();
         assert_eq!(126, rules.bags_that_can_contain("shiny gold").len());
     }
 }
