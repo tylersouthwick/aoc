@@ -64,13 +64,43 @@ impl XMASData {
     }
 
     fn find_first_failure(&self, preamble_len : usize) -> Option<u64> {
+        self.do_find_first_failure(preamble_len).map(|x| x.1)
+    }
+
+    fn do_find_first_failure(&self, preamble_len : usize) -> Option<(usize, u64)> {
         for i in preamble_len..self.data.len() {
             if !self.is_valid(preamble_len, i) {
                 //println!("index={} is invalid", i);
-                return Some(self.data[i]);
+                return Some((i, self.data[i]));
             }
         }
         None
+    }
+
+    fn find_weakness_range(&self, i : usize, value: u64) -> Option<Vec<u64>> {
+        for x in 0..i {
+            println!("==== NEW LOOP ====");
+            let mut result = 0;
+            for y in x..i {
+                result = result + self.data[y];
+                println!("current={} total={}", self.data[y], result);
+                if result > value {
+                    break;
+                } else if result == value {
+                    return Some(self.data[x..y + 1].to_vec());
+                }
+            }
+        }
+        None
+    }
+    fn find_encryption_weakness(&self, preamble_len : usize) -> Option<u64> {
+        match self.do_find_first_failure(preamble_len) {
+            Some((i, value)) => match self.find_weakness_range(i, value) {
+                Some(range) => Some(range.iter().min().unwrap() + range.iter().max().unwrap()),
+                None => None
+            },
+            None => None
+        }
     }
 
 }
@@ -79,6 +109,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let data = XMASData::from_input()?;
     println!("part1: data: {:?}", data.find_first_failure(25));
+    println!("part2: encryption weakness: {:?}", data.find_encryption_weakness(25));
 
     Ok(())
 }
@@ -98,9 +129,7 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn find_invalid_number() -> Result<(), Box<dyn std::error::Error>> {
-        let data = "35
+    const TEST_DATA : &str = "35
         20
         15
         25
@@ -121,7 +150,9 @@ mod tests {
         309
         576";
 
-        let xmas_data = XMASData::from_str(data)?;
+    #[test]
+    fn find_invalid_number() -> Result<(), Box<dyn std::error::Error>> {
+        let xmas_data = XMASData::from_str(TEST_DATA)?;
         let first_failure = xmas_data.find_first_failure(5);
         assert_eq!(Some(127), first_failure);
         Ok(())
@@ -132,6 +163,26 @@ mod tests {
         let xmas_data = XMASData::from_input()?;
         let first_failure = xmas_data.find_first_failure(25);
         assert_eq!(Some(248131121), first_failure);
+        Ok(())
+    }
+
+    mod part2 {
+        use super::*;
+
+        #[test]
+        fn encryption_weakness() -> Result<(), Box<dyn std::error::Error>> {
+            let xmas_data = XMASData::from_str(TEST_DATA)?;
+            let encryption_weakness = xmas_data.find_encryption_weakness(5);
+            assert_eq!(Some(62), encryption_weakness);
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn part2() -> Result<(), Box<dyn std::error::Error>> {
+        let xmas_data = XMASData::from_input()?;
+        let encryption_weakness = xmas_data.find_encryption_weakness(25);
+        assert_eq!(Some(31580383), encryption_weakness);
         Ok(())
     }
 
