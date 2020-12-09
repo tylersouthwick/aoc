@@ -75,6 +75,7 @@ impl FromStr for GameConsole {
 #[derive(Debug)]
 enum GameConsoleExecutionError {
     InfiniteLoopError { last_accumulator : i32 },
+    InstructionPointerExceedsProgram,
 }
 
 impl Error for GameConsoleExecutionError{}
@@ -91,12 +92,18 @@ impl GameConsole {
         Ok(game_console)
     }
 
-    fn execute(&self) -> Result<usize, GameConsoleExecutionError>  {
+    fn execute(&self) -> Result<i32, GameConsoleExecutionError>  {
         let mut accumulator : i32 = 0;
         let mut indexes_visited : HashSet<usize> = HashSet::new();
         let mut ip : usize = 0;
 
         loop {
+            if ip == self.instructions.len() {
+                return Ok(accumulator);
+            }
+            if ip > self.instructions.len() {
+                return Err(GameConsoleExecutionError::InstructionPointerExceedsProgram);
+            }
             //println!("checking ip={}", ip);
             if indexes_visited.contains(&ip) {
                 return Err(GameConsoleExecutionError::InfiniteLoopError {last_accumulator: accumulator});
@@ -202,5 +209,38 @@ mod tests {
             _ => Err("should be infinite loop".to_string()),
         }
     }
+
+    mod execution {
+        use super::*;
+
+        #[test]
+        fn full_game() -> Result<(), Box<dyn std::error::Error>> {
+            let game = GameConsole::from_str("
+            nop +0
+            jmp +2
+            acc +1
+            acc +1
+            acc +1").unwrap();
+
+            let result = game.execute()?;
+            assert_eq!(result, 2);
+            Ok(())
+        }
+
+        #[test]
+        fn ip_exceeds_length_of_program() -> Result<(), String> {
+            let game = GameConsole::from_str("
+            jmp +2").unwrap();
+
+            match game.execute() {
+                Err(GameConsoleExecutionError::InstructionPointerExceedsProgram) => {
+                    Ok(())
+                }
+                _ => Err("should fail with InstructionPointerExceedsProgram".to_string()),
+            }
+        }
+
+    }
+
 
 }
